@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A zero-install, single-file chat playground for any OpenAI-compatible endpoint. Defaults to Ollama.">
+<meta name="theme-color" content="#faf7f2">
+<title>Local Chat Playground</title>
+<style>
+  /* ---------------------------------------------------------------
+     Theme palette. VARIANT BUILD NOTE: the build script rewrites the
+     CSS between the THEME markers below to produce themed variants.
+     ---------------------------------------------------------------- */
+  /* THEME:START
+  :root {
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --bg: #faf7f2;
+    --panel: #fffdf9;
+    --panel-2: #f4efe7;
+    --text: #2c2a26;
+    --muted: #7a7365;
+    --accent: #b4581f;
+    --accent-contrast: #fffdf9;
+    --border: #e3dcd0;
+    --user-bubble: #ecdfd2;
+    --bot-bubble: #f7f3ec;
+    --code-bg: #2c2a26;
+    --danger: #b3261e;
+  }/* THEME:END */
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+  header .spacer { flex: 1; }
+  #status {
+    font-size: 0.8rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40ch;
+  }
+  #status.error { color: var(--danger); }
+
+  button, select, input, textarea {
+    font: inherit;
+    color: inherit;
+  }
+  button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+  }
+  button.danger:hover { border-color: var(--danger); color: var(--danger); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Settings drawer */
+  main { flex: 1; display: flex; min-height: 0; }
+  #settings {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 14px;
+    overflow-y: auto;
+  }
+  #settings label { display: block; margin: 12px 0 4px; font-size: 0.85rem; color: var(--muted); }
+  #settings input[type="text"], #settings input[type="password"],
+  #settings textarea, #settings select {
+    width: 100%;
+    padding: 7px 9px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  #settings textarea { resize: vertical; min-height: 90px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row .grow { flex: 1; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin: 4px 0 0; }
+  #cfg-temp { width: 100%; }
+  details {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 14px;
+    padding: 8px 10px;
+  }
+  details summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+  #cfg-prompts { list-style: none; margin: 8px 0 0; padding: 0; }
+  #cfg-prompts li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 1px solid var(--border);
+  }
+  #cfg-prompts .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+  #cfg-prompts button { padding: 3px 8px; font-size: 0.78rem; }
+
+  /* Chat column */
+  #chat-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .msg { max-width: 78ch; width: fit-content; }
+  .msg .who {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 3px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .msg .bubble {
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--bot-bubble);
+    overflow-wrap: anywhere;
+  }
+  .msg.user .bubble { background: var(--user-bubble); }
+  .msg.system .bubble { background: var(--panel-2); color: var(--muted); font-size: 0.85rem; }
+  .msg.error .bubble { border-color: var(--danger); color: var(--danger); font-size: 0.9rem; }
+  .msg p { margin: 0.3em 0; white-space: pre-wrap; }
+  .msg p:first-child { margin-top: 0; }
+  .msg p:last-child { margin-bottom: 0; }
+  .msg pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+  }
+  .msg code { font-family: var(--font-mono); font-size: 0.88em; }
+  .msg p code, .msg li code {
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 5px;
+  }
+  .msg ul, .msg ol { margin: 0.3em 0; padding-left: 1.4em; }
+  .msg blockquote {
+    margin: 0.4em 0;
+    padding: 2px 12px;
+    border-left: 3px solid var(--accent);
+    color: var(--muted);
+  }
+  .msg a { color: var(--accent); }
+  .cursor {
+    display: inline-block;
+    width: 9px; height: 15px;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Composer */
+  #composer {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    align-items: flex-end;
+  }
+  #input {
+    flex: 1;
+    min-height: 46px;
+    max-height: 200px;
+    resize: none;
+    padding: 10px 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  #input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .empty-note { color: var(--muted); text-align: center; margin-top: 3rem; }
+
+  @media (max-width: 760px) {
+    #settings { position: absolute; z-index: 10; top: 53px; bottom: 0; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Local Chat Playground (daybreak)</h1>
+  <button id="btn-settings" type="button" aria-expanded="false">Settings</button>
+  <span id="status">Not connected yet - open Settings and pick a model.</span>
+  <span class="spacer"></span>
+  <button id="btn-new" type="button" title="Start a fresh conversation">New chat</button>
+  <button id="btn-export" type="button" title="Download the conversation as a Markdown file">Export .md</button>
+</header>
+
+<main>
+  <aside id="settings" hidden>
+    <form id="config-form" autocomplete="off" onsubmit="return false;">
+      <label for="cfg-endpoint">API endpoint (OpenAI-compatible base URL)</label>
+      <input type="text" id="cfg-endpoint" placeholder="http://localhost:11434/v1">
+
+      <label for="cfg-apikey">API key (optional, this session only)</label>
+      <input type="password" id="cfg-apikey" placeholder="Leave empty for Ollama">
+      <p class="hint">Kept in memory and never saved to disk or localStorage.</p>
+
+      <label for="cfg-model">Model (from /models)</label>
+      <div class="row">
+        <select id="cfg-model" class="grow"><option value="">-</option></select>
+        <button id="btn-refresh-models" type="button" title="Fetch the model list from the endpoint">Refresh</button>
+      </div>
+
+      <label for="cfg-temp">Temperature: <span id="cfg-temp-val">0.7</span></label>
+      <input type="range" id="cfg-temp" min="0" max="2" step="0.1" value="0.7">
+
+      <label for="cfg-system">System prompt</label>
+      <textarea id="cfg-system" placeholder="You are a helpful assistant..."></textarea>
+
+      <details>
+        <summary>Prompt library (saved in this browser)</summary>
+        <label for="cfg-prompt-name">Save current prompt as</label>
+        <div class="row">
+          <input type="text" id="cfg-prompt-name" class="grow" placeholder="e.g. Kind explainer">
+          <button id="btn-prompt-save" type="button">Save</button>
+        </div>
+        <ul id="cfg-prompts"></ul>
+      </details>
+    </form>
+  </aside>
+
+  <section id="chat-col" aria-label="Chat">
+    <div id="messages" aria-live="polite"></div>
+    <div id="composer">
+      <textarea id="input" placeholder="Say something... (Enter to send, Shift+Enter for a new line)"></textarea>
+      <button id="btn-send" class="primary" type="button">Send</button>
+    </div>
+  </section>
+</main>
+
+<!-- =========================================================
+     Core logic: pure, DOM-free functions. The Node tests in
+     ../tests extract this exact block and run it, so what you
+     ship is what gets tested. Do not add DOM calls here.
+     ========================================================= -->
+<script id="core">
+var ChatCore = (function () {
+  'use strict';
+
+  var DEFAULTS = {
+    baseUrl: 'http://localhost:11434/v1',
+    model: '',
+    temperature: 0.7,
+    systemPrompt: ''
+  };
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // "localhost:11434" -> "http://localhost:11434/v1"
+  // "http://localhost:11434/" -> "http://localhost:11434/v1"
+  // "https://api.example.com/openai/v1" -> unchanged
+  function normalizeBaseUrl(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    if (!/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(s)) s = 'http://' + s;
+    s = s.replace(/\/+$/, '');
+    var path = '';
+    try { path = new URL(s).pathname; } catch (e) { path = 'X'; }
+    if (path === '/' || path === '') s += '/v1';
+    return s;
+  }
+
+  // Accepted input: a config object or a JSON string (as stored in
+  // localStorage). Never throws. Returns { config, warnings }.
+  function parseConfig(input) {
+    var warnings = [];
+    var cfg = {
+      baseUrl: DEFAULTS.baseUrl,
+      model: DEFAULTS.model,
+      temperature: DEFAULTS.temperature,
+      systemPrompt: DEFAULTS.systemPrompt
+    };
+    var obj = input;
+    if (typeof input === 'string') {
+      var trimmed = input.trim();
+      if (!trimmed) return { config: cfg, warnings: warnings };
+      try {
+        obj = JSON.parse(trimmed);
+      } catch (e) {
+        return { config: cfg, warnings: ['Saved settings were not valid JSON; using defaults.'] };
+      }
+    }
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      if ('baseUrl' in obj) {
+        if (typeof obj.baseUrl === 'string' && obj.baseUrl.trim()) {
+          cfg.baseUrl = normalizeBaseUrl(obj.baseUrl);
+        } else if (obj.baseUrl != null && obj.baseUrl !== '') {
+          warnings.push('Ignored "baseUrl": expected a non-empty string; using the default.');
+        }
+      }
+      if ('model' in obj) {
+        if (typeof obj.model === 'string') {
+          cfg.model = obj.model.trim();
+        } else if (obj.model != null) {
+          warnings.push('Ignored "model": expected a string.');
+        }
+      }
+      if ('temperature' in obj) {
+        var t = typeof obj.temperature === 'number' ? obj.temperature : Number(obj.temperature);
+        if (obj.temperature === null || typeof obj.temperature === 'boolean' ||
+            (typeof obj.temperature !== 'number' && typeof obj.temperature !== 'string') ||
+            String(obj.temperature).trim() === '' || Number.isNaN(t)) {
+          warnings.push('Ignored "temperature": expected a number between 0 and 2; using 0.7.');
+        } else {
+          cfg.temperature = Math.min(2, Math.max(0, t));
+        }
+      }
+      if ('systemPrompt' in obj) {
+        if (typeof obj.systemPrompt === 'string') {
+          cfg.systemPrompt = obj.systemPrompt;
+        } else if (obj.systemPrompt != null) {
+          warnings.push('Ignored "systemPrompt": expected a string.');
+        }
+      }
+    } else if (obj !== null && obj !== undefined) {
+      warnings.push('Saved settings were not an object; using defaults.');
+    }
+    return { config: cfg, warnings: warnings };
+  }
+
+  var pad2 = function (n) { return String(n).padStart(2, '0'); };
+
+  // Messages: [{role: 'user'|'assistant'|'system'|'error', content}].
+  // Meta: {date (Date), model, endpoint, systemPrompt}.
+  function formatTranscript(messages, meta) {
+    meta = meta || {};
+    var lines = [];
+    lines.push('# Chat transcript');
+    lines.push('');
+    var d = meta.date instanceof Date && !isNaN(meta.date) ? meta.date : new Date();
+    lines.push('- **Date:** ' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+      ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()));
+    if (meta.model) lines.push('- **Model:** ' + meta.model);
+    if (meta.endpoint) lines.push('- **Endpoint:** ' + meta.endpoint);
+    var sys = (meta.systemPrompt || '').trim();
+    if (sys) {
+      lines.push('');
+      lines.push('**System prompt**');
+      lines.push('');
+      sys.split('\n').forEach(function (l) { lines.push('> ' + l); });
+    }
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+    (messages || []).forEach(function (m) {
+      if (!m || m.role === 'error' || !String(m.content || '').trim()) return;
+      lines.push('## ' + (m.role === 'user' ? 'You' : 'Assistant'));
+      lines.push('');
+      lines.push(String(m.content).trim());
+      lines.push('');
+    });
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '\n');
+  }
+
+  // Small, safe Markdown subset renderer. Everything is HTML-escaped
+  // before any tags are added, so chat content can never inject markup.
+  // Supported: headings, fenced code, inline code, bold, italic, links,
+  // unordered/ordered lists, blockquotes, --- rules, paragraphs.
+  function inline(md) {
+    var stash = [];
+    var text = md.replace(/`([^`\n]+)`/g, function (_, code) {
+      stash.push('<code>' + code + '</code>');
+      return '\u0000' + (stash.length - 1) + '\u0000';
+    });
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    text = text.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    text = text.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, function (_, label, url) {
+      if (/^(https?:\/\/|\/|#)/i.test(url)) {
+        return '<a href="' + url + '" rel="noopener noreferrer" target="_blank">' + label + '</a>';
+      }
+      return label;
+    });
+    text = text.replace(/\u0000(\d+)\u0000/g, function (_, i) { return stash[Number(i)]; });
+    return text;
+  }
+
+  function markdownToHtml(md) {
+    var src = escapeHtml(String(md == null ? '' : md));
+    var lines = src.split('\n');
+    var out = [];
+    var listTag = null;      // 'ul' | 'ol'
+    var inQuote = false;
+    var para = [];
+    var inCode = false;
+    var codeLang = '';
+    var codeBuf = [];
+
+    function closeList() { if (listTag) { out.push('</' + listTag + '>'); listTag = null; } }
+    function closeQuote() { if (inQuote) { out.push('</blockquote>'); inQuote = false; } }
+    function closePara() { if (para.length) { out.push('<p>' + para.join('\n') + '</p>'); para = []; } }
+    function closeAll() { closePara(); closeList(); closeQuote(); }
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+
+      if (inCode) {
+        if (/^```/.test(line.trim())) {
+          out.push('<pre><code' + (codeLang ? ' class="language-' + codeLang + '"' : '') + '>' +
+            codeBuf.join('\n') + '</code></pre>');
+          inCode = false; codeBuf = []; codeLang = '';
+        } else {
+          codeBuf.push(line);
+        }
+        continue;
+      }
+
+      var trimmed = line.trim();
+
+      if (/^```/.test(trimmed)) {
+        closeAll();
+        inCode = true;
+        codeBuf = [];
+        codeLang = trimmed.slice(3).trim();
+        continue;
+      }
+
+      if (!trimmed) { closePara(); closeList(); closeQuote(); continue; }
+
+      var h = trimmed.match(/^(#{1,6})\s+(.*)$/);
+      if (h) {
+        closeAll();
+        var level = h[1].length;
+        out.push('<h' + level + '>' + inline(h[2]) + '</h' + level + '>');
+        continue;
+      }
+
+      if (/^(---+|\*\*\*+|___+)$/.test(trimmed)) {
+        closeAll();
+        out.push('<hr>');
+        continue;
+      }
+
+      var q = trimmed.match(/^&gt;\s?(.*)$/);
+      if (q) {
+        closePara(); closeList();
+        if (!inQuote) { out.push('<blockquote>'); inQuote = true; }
+        out.push('<p>' + inline(q[1]) + '</p>');
+        continue;
+      }
+      closeQuote();
+
+      var li = trimmed.match(/^[-*+]\s+(.*)$/);
+      if (li) {
+        closePara();
+        if (listTag !== 'ul') { closeList(); out.push('<ul>'); listTag = 'ul'; }
+        out.push('<li>' + inline(li[1]) + '</li>');
+        continue;
+      }
+
+      var oli = trimmed.match(/^\d+[.)]\s+(.*)$/);
+      if (oli) {
+        closePara();
+        if (listTag !== 'ol') { closeList(); out.push('<ol>'); listTag = 'ol'; }
+        out.push('<li>' + inline(oli[1]) + '</li>');
+        continue;
+      }
+      closeList();
+
+      para.push(inline(trimmed));
+    }
+    if (inCode) {
+      out.push('<pre><code' + (codeLang ? ' class="language-' + codeLang + '"' : '') + '>' +
+        codeBuf.join('\n') + '</code></pre>');
+    }
+    closeAll();
+    return out.join('\n');
+  }
+
+  return {
+    DEFAULTS: DEFAULTS,
+    escapeHtml: escapeHtml,
+    normalizeBaseUrl: normalizeBaseUrl,
+    parseConfig: parseConfig,
+    formatTranscript: formatTranscript,
+    markdownToHtml: markdownToHtml
+  };
+})();
+globalThis.ChatCore = ChatCore;
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var C = globalThis.ChatCore;
+
+  var LS = {
+    config: 'ollama-chat-page:config',
+    prompts: 'ollama-chat-page:prompts',
+    history: 'ollama-chat-page:history'
+  };
+
+  var cfg = { baseUrl: C.DEFAULTS.baseUrl, model: '', temperature: 0.7, systemPrompt: '' };
+  var apiKey = '';            // session-only, never persisted
+  var prompts = [];           // [{name, text}]
+  var history = [];           // [{role, content}] user + assistant only
+  var controller = null;      // in-flight request aborter
+  var streamingEl = null;
+  var streamingText = '';
+
+  function setStatus(msg, isError) {
+    var el = $('status');
+    el.textContent = msg;
+    el.classList.toggle('error', !!isError);
+  }
+
+  function lsGet(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw === null ? fallback : raw;
+    } catch (e) { return fallback; }
+  }
+  function lsSet(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* storage full or blocked */ }
+  }
+  function lsDel(key) {
+    try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
+  }
+
+  /* ---------- config panel ---------- */
+
+  function loadConfig() {
+    var parsed = C.parseConfig(lsGet(LS.config, '{}'));
+    cfg = parsed.config;
+    parsed.warnings.forEach(function (w) { setStatus(w, true); });
+
+    prompts = [];
+    try { prompts = JSON.parse(lsGet(LS.prompts, '[]')) || []; } catch (e) { prompts = []; }
+    if (!Array.isArray(prompts)) prompts = [];
+    prompts = prompts.filter(function (p) { return p && typeof p === 'object' && typeof p.name === 'string'; });
+
+    try { history = JSON.parse(lsGet(LS.history, '[]')) || []; } catch (e) { history = []; }
+    if (!Array.isArray(history)) history = [];
+
+    $('cfg-endpoint').value = cfg.baseUrl;
+    $('cfg-temp').value = String(cfg.temperature);
+    $('cfg-temp-val').textContent = cfg.temperature;
+    $('cfg-system').value = cfg.systemPrompt;
+    $('cfg-model').value = cfg.model;
+    renderPromptLibrary();
+    renderHistory();
+  }
+
+  function saveConfig() {
+    cfg.baseUrl = C.normalizeBaseUrl($('cfg-endpoint').value) || C.DEFAULTS.baseUrl;
+    cfg.temperature = Number($('cfg-temp').value);
+    cfg.systemPrompt = $('cfg-system').value;
+    var sel = $('cfg-model');
+    cfg.model = sel.value;
+    lsSet(LS.config, JSON.stringify(cfg));
+    apiKey = $('cfg-apikey').value.trim();
+  }
+
+  function authHeaders() {
+    var h = { 'Content-Type': 'application/json' };
+    if (apiKey) h['Authorization'] = 'Bearer ' + apiKey;
+    return h;
+  }
+
+  async function refreshModels() {
+    saveConfig();
+    var base = C.normalizeBaseUrl($('cfg-endpoint').value);
+    setStatus('Fetching model list from ' + base + ' ...');
+    try {
+      var res = await fetch(base + '/models', { headers: authHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      var data = await res.json();
+      var ids = (data && data.data ? data.data : []).map(function (m) { return m.id; })
+        .filter(Boolean).sort();
+      var sel = $('cfg-model');
+      var keep = sel.value || cfg.model;
+      sel.innerHTML = '';
+      if (!ids.length) sel.appendChild(new Option('No models found', ''));
+      ids.forEach(function (id) { sel.appendChild(new Option(id, id)); });
+      if (ids.indexOf(keep) !== -1) sel.value = keep;
+      setStatus('Loaded ' + ids.length + ' model' + (ids.length === 1 ? '' : 's') + '.');
+    } catch (err) {
+      setStatus('Could not load models: ' + err.message + ' (Is the server running? CORS allowed? See README.)', true);
+    }
+  }
+
+  /* ---------- prompt library ---------- */
+
+  function renderPromptLibrary() {
+    var ul = $('cfg-prompts');
+    ul.innerHTML = '';
+    if (!prompts.length) {
+      var li = document.createElement('li');
+      li.innerHTML = '<span class="hint">Nothing saved yet.</span>';
+      ul.appendChild(li);
+      return;
+    }
+    prompts.forEach(function (p, i) {
+      var li = document.createElement('li');
+      var name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = p.name;
+      name.title = p.text;
+      var load = document.createElement('button');
+      load.textContent = 'Load';
+      load.type = 'button';
+      load.addEventListener('click', function () {
+        $('cfg-system').value = p.text;
+        saveConfig();
+      });
+      var del = document.createElement('button');
+      del.textContent = 'Delete';
+      del.type = 'button';
+      del.className = 'danger';
+      del.addEventListener('click', function () {
+        prompts.splice(i, 1);
+        lsSet(LS.prompts, JSON.stringify(prompts));
+        renderPromptLibrary();
+      });
+      li.appendChild(name);
+      li.appendChild(load);
+      li.appendChild(del);
+      ul.appendChild(li);
+    });
+  }
+
+  function savePrompt() {
+    var text = $('cfg-system').value.trim();
+    var name = $('cfg-prompt-name').value.trim();
+    if (!text) { setStatus('Write a system prompt before saving it.', true); return; }
+    if (!name) { setStatus('Give the prompt a name first.', true); return; }
+    var existing = prompts.findIndex(function (p) { return p.name === name; });
+    if (existing !== -1) prompts[existing].text = text;
+    else prompts.push({ name: name, text: text });
+    lsSet(LS.prompts, JSON.stringify(prompts));
+    $('cfg-prompt-name').value = '';
+    renderPromptLibrary();
+    setStatus('Prompt "' + name + '" saved in this browser.');
+  }
+
+  /* ---------- rendering ---------- */
+
+  function addMessageEl(role) {
+    var wrap = document.createElement('div');
+    wrap.className = 'msg ' + role;
+    var who = document.createElement('div');
+    who.className = 'who';
+    who.textContent = role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : role === 'system' ? 'System' : 'Error';
+    var bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    wrap.appendChild(who);
+    wrap.appendChild(bubble);
+    $('messages').appendChild(wrap);
+    scrollDown();
+    return bubble;
+  }
+
+  function renderInto(bubble, markdown) {
+    bubble.innerHTML = C.markdownToHtml(markdown);
+  }
+
+  function scrollDown() {
+    var box = $('messages');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function renderHistory() {
+    var box = $('messages');
+    box.innerHTML = '';
+    if (!history.length) {
+      var note = document.createElement('p');
+      note.className = 'empty-note';
+      note.textContent = 'Pick a model in Settings, then say hello. Everything stays in this browser.';
+      box.appendChild(note);
+      return;
+    }
+    history.forEach(function (m) {
+      var b = addMessageEl(m.role);
+      renderInto(b, m.content);
+    });
+    scrollDown();
+  }
+
+  function persistHistory() { lsSet(LS.history, JSON.stringify(history)); }
+
+  function newChat() {
+    if (controller) controller.abort();
+    history = [];
+    lsDel(LS.history);
+    renderHistory();
+    setStatus('Started a new chat.');
+  }
+
+  async function send() {
+    if (controller) { controller.abort(); return; }  // acts as Stop while streaming
+    var text = $('input').value.trim();
+    if (!text) return;
+    saveConfig();
+    var model = $('cfg-model').value;
+    if (!model) {
+      setStatus('Pick a model first (Settings > Refresh, then choose one).', true);
+      return;
+    }
+
+    $('input').value = '';
+    $('input').focus();
+
+    if (!history.length) $('messages').innerHTML = '';
+    history.push({ role: 'user', content: text });
+    var userBubble = addMessageEl('user');
+    renderInto(userBubble, text);
+    persistHistory();
+
+    var botBubble = addMessageEl('assistant');
+    botBubble.innerHTML = '<span class="cursor"></span>';
+    streamingText = '';
+    streamingEl = botBubble;
+
+    var msgs = [];
+    if (cfg.systemPrompt.trim()) {
+      msgs.push({ role: 'system', content: cfg.systemPrompt.trim() });
+    }
+    history.forEach(function (m) {
+      msgs.push({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content });
+    });
+
+    controller = new AbortController();
+    setSendButton(true);
+    setStatus('Streaming from ' + model + ' ...');
+
+    try {
+      var res = await fetch(C.normalizeBaseUrl($('cfg-endpoint').value) + '/chat/completions', {
+        method: 'POST',
+        headers: authHeaders(),
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: model,
+          messages: msgs,
+          temperature: cfg.temperature,
+          stream: true
+        })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      if (!res.body) throw new Error('Streaming not supported by this browser.');
+
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      var lastPaint = 0;
+
+      for (;;) {
+        var ev = await reader.read();
+        if (ev.done) break;
+        buf += decoder.decode(ev.value, { stream: true });
+        var idx;
+        while ((idx = buf.indexOf('\n')) !== -1) {
+          var line = buf.slice(0, idx).trim();
+          buf = buf.slice(idx + 1);
+          if (!line.startsWith('data:')) continue;
+          var payload = line.slice(5).trim();
+          if (payload === '[DONE]') break;
+          var chunk;
+          try { chunk = JSON.parse(payload); } catch (e) { continue; }
+          var piece = chunk && chunk.choices && chunk.choices[0] &&
+            (chunk.choices[0].delta && chunk.choices[0].delta.content ||
+             chunk.choices[0].message && chunk.choices[0].message.content) || '';
+          if (piece) {
+            streamingText += piece;
+            var now = Date.now();
+            if (now - lastPaint > 50) {
+              renderInto(streamingEl, streamingText + ' \u258d');
+              lastPaint = now;
+              scrollDown();
+            }
+          }
+        }
+      }
+      renderInto(botBubble, streamingText || '(empty response)');
+    } catch (err) {
+      var aborted = err.name === 'AbortError';
+      if (aborted) {
+        renderInto(botBubble, (streamingText || '(no reply yet)') + '\n\n*(stopped)*');
+        setStatus('Stopped.');
+      } else {
+        streamingEl = null;
+        botBubble.closest('.msg').remove();
+        var hint = err instanceof TypeError
+          ? ' The browser blocked the request - is the server running, and does it send CORS headers for this page? (Run `npm run check-cors` or see the README.)'
+          : '';
+        var msg = 'Streaming failed: ' + err.message + hint;
+        var b = addMessageEl('error');
+        b.textContent = msg;
+        setStatus(msg, true);
+      }
+    }
+
+    if (streamingText && !aborted) {
+      history.push({ role: 'assistant', content: streamingText });
+    }
+    controller = null;
+    streamingEl = null;
+    setSendButton(false);
+    setStatus('Done. ' + model + ' replied.');
+  }
+
+  function setSendButton(streaming) {
+    var btn = $('btn-send');
+    btn.textContent = streaming ? 'Stop' : 'Send';
+    btn.classList.toggle('primary', !streaming);
+  }
+
+  /* ---------- export ---------- */
+
+  function exportMarkdown() {
+    if (!history.some(function (m) { return String(m.content || '').trim(); })) {
+      setStatus('Nothing to export yet.', true);
+      return;
+    }
+    var md = C.formatTranscript(history, {
+      date: new Date(),
+      model: cfg.model || $('cfg-model').value,
+      endpoint: C.normalizeBaseUrl($('cfg-endpoint').value),
+      systemPrompt: cfg.systemPrompt
+    });
+    var d = new Date();
+    var stamp = d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '-' + pad2(d.getHours()) + pad2(d.getMinutes());
+    var blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'chat-transcript-' + stamp + '.md';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    setStatus('Transcript exported as Markdown.');
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  /* ---------- wiring ---------- */
+
+  $('btn-settings').addEventListener('click', function () {
+    var panel = $('settings');
+    panel.hidden = !panel.hidden;
+    this.setAttribute('aria-expanded', String(!panel.hidden));
+    if (!panel.hidden) refreshModels();
+  });
+  $('btn-new').addEventListener('click', newChat);
+  $('btn-export').addEventListener('click', exportMarkdown);
+  $('btn-refresh-models').addEventListener('click', refreshModels);
+  $('btn-send').addEventListener('click', send);
+  $('btn-prompt-save').addEventListener('click', savePrompt);
+  $('cfg-endpoint').addEventListener('change', refreshModels);
+  $('cfg-temp').addEventListener('input', function () {
+    $('cfg-temp-val').textContent = this.value;
+    saveConfig();
+  });
+  $('cfg-system').addEventListener('change', saveConfig);
+  $('cfg-model').addEventListener('change', saveConfig);
+  $('input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  });
+  $('input').focus();
+
+  loadConfig();
+  setStatus('Ready. Open Settings (or press the button) and Refresh to load models.');
+})();
+</script>
+</body>
+</html>

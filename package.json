@@ -1,0 +1,27 @@
+{
+  "name": "ollama-chat-page-template",
+  "version": "1.0.0",
+  "description": "Zero-install, single-file local chat playground for any OpenAI-compatible endpoint. Defaults to Ollama, streams replies, renders Markdown, saves your prompt library in localStorage, and exports transcripts as Markdown.",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test tests/",
+    "check-cors": "node scripts/check-cors.mjs",
+    "build:variants": "node scripts/build-variants.mjs"
+  },
+  "author": "Asdale Dynamics, LLC",
+  "keywords": [
+    "ollama",
+    "local-llm",
+    "openai-compatible",
+    "chat",
+    "single-file",
+    "template"
+  ]
+}
